@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<head>
+  <title>test</title>
+  <style>
+    * { margin: 0; padding: 0; }
+    body, html { height: 100% }
+    canvas { position: absolute; width: 100% ;height: 100%; }
+  </style>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+  <center>
+    <div style="color: #fff; position: fixed; top: 0; width: 100%">
+    <span>Skeleton:</span><select id="skeletonList"></select>
+    <span>Animation:</span><select id="animationList"></select>
+    <span>Skin:</span><select id="skinList"></select>
+    <span>Vertex Effect:</span><select id="effectList"></select>
+    <span>Debug:</span><input type="checkbox" id="debug">
+    <div>
+  </center>
+
+  <script src="./vendor/spine-webgl.js"></script>
+</body>

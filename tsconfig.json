@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "target": "esnext",
+    "strict": true,
+    "watch": false,
+    "module": "none",
+    "noImplicitAny": true,
+    "importHelpers": false,
+    "sourceMap": true,
+    "stripInternal": true,
+    "alwaysStrict": true,
+    "noUnusedLocals": true,
+    "esModuleInterop": true,
+    "experimentalDecorators": true,
+    "declaration": false,
+  },
+  "exclude": [
+    "node_modules"
+  ]
+}
