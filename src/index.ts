@@ -1,27 +1,54 @@
-let lastFrameTime = Date.now() / 1000;
-let canvas;
-let shader;
-let batcher;
-let gl;
+let lastFrameTime = 0;
+let canvas: HTMLCanvasElement;
+let shader: spine.webgl.Shader;
+let batcher: spine.webgl.PolygonBatcher;
+let gl: WebGLRenderingContext | null;
 let mvp = new spine.webgl.Matrix4();
-let assetManager;
-let skeletonRenderer;
-let debugRenderer;
-let shapes;
-let skeletons = {};
+let assetManager: spine.webgl.AssetManager;
+let skeletonRenderer: spine.webgl.SkeletonRenderer;
+let debugRenderer: spine.webgl.SkeletonDebugRenderer;
+let shapes: spine.webgl.ShapeRenderer;
+let skeletons: Skeletons = {};
 let activeSkeleton = "spineboy";
 let swirlEffect = new spine.SwirlEffect(0);
 let jitterEffect = new spine.JitterEffect(20, 20);
 let swirlTime = 0;
+let debugShader: spine.webgl.Shader;
+
+const $ = document.querySelector.bind(document);
+
+function getSelectedText(id: string): string {
+	const e = document.getElementById(id) as HTMLSelectElement;
+	if (!e) debugger;
+	return e.options[e.selectedIndex].value;
+}
+
+console.log(spine);
+
+interface Bounds {
+	offset: spine.Vector2;
+	size: spine.Vector2;
+};
+
+interface LoadSkeletonRet {
+	skeleton: spine.Skeleton;
+	state: spine.AnimationState;
+	bounds: Bounds;
+	premultipliedAlpha: boolean;
+}
+
+interface Skeletons {
+	[propName: string]: LoadSkeletonRet
+}
 
 function init () {
 	// Setup canvas and WebGL context. We pass alpha: false to canvas.getContext() so we don't use premultiplied alpha when
 	// loading textures. That is handled separately by PolygonBatcher.
-	canvas = document.getElementById("canvas");
+	canvas = document.getElementById("canvas") as HTMLCanvasElement;
 	canvas.width = window.innerWidth;
 	canvas.height = window.innerHeight;
 	let config = { alpha: false };
-	gl = canvas.getContext("webgl", config) || canvas.getContext("experimental-webgl", config);
+	gl = (canvas.getContext("webgl", config) || canvas.getContext("experimental-webgl", config)) as WebGLRenderingContext | null;
 	if (!gl) {
 		alert('WebGL is unavailable.');
 		return;
@@ -31,7 +58,7 @@ function init () {
 	shader = spine.webgl.Shader.newTwoColoredTextured(gl);
 	batcher = new spine.webgl.PolygonBatcher(gl);
 	mvp.ortho2d(0, 0, canvas.width - 1, canvas.height - 1);
-	skeletonRenderer = new spine.webgl.SkeletonRenderer(gl);
+	skeletonRenderer = new spine.webgl.SkeletonRenderer(new spine.webgl.ManagedWebGLRenderingContext(gl));
 	debugRenderer = new spine.webgl.SkeletonDebugRenderer(gl);
 	debugRenderer.drawRegionAttachments = true;
 	debugRenderer.drawBoundingBoxes = true;
@@ -80,14 +107,14 @@ function load () {
 	}
 }
 
-function loadSkeleton (name, initialAnimation, premultipliedAlpha, skin) {
+function loadSkeleton (name: string, initialAnimation: string, premultipliedAlpha: boolean, skin?: string) {
 	if (skin === undefined) skin = "default";
 
 	// Load the texture atlas using name.atlas from the AssetManager.
-	atlas = assetManager.get("assets/" + name.replace("-ess", "").replace("-pro", "").replace("-stretchy-ik", "") + (premultipliedAlpha ? "-pma": "") + ".atlas");
+	const atlas = assetManager.get("assets/" + name.replace("-ess", "").replace("-pro", "").replace("-stretchy-ik", "") + (premultipliedAlpha ? "-pma": "") + ".atlas");
 
 	// Create a AtlasAttachmentLoader that resolves region, mesh, boundingbox and path attachments
-	atlasLoader = new spine.AtlasAttachmentLoader(atlas);
+	const atlasLoader = new spine.AtlasAttachmentLoader(atlas);
 
 	// Create a SkeletonJson instance for parsing the .json file.
 	let skeletonJson = new spine.SkeletonJson(atlasLoader);
@@ -99,34 +126,34 @@ function loadSkeleton (name, initialAnimation, premultipliedAlpha, skin) {
 	let bounds = calculateBounds(skeleton);
 
 	// Create an AnimationState, and set the initial animation in looping mode.
-	animationStateData = new spine.AnimationStateData(skeleton.data);
+	const animationStateData = new spine.AnimationStateData(skeleton.data);
 	let animationState = new spine.AnimationState(animationStateData);
 	if (name == "spineboy") {
 		animationStateData.setMix("walk", "jump", 0.4)
 		animationStateData.setMix("jump", "run", 0.4);
 		animationState.setAnimation(0, "walk", true);
-		let jumpEntry = animationState.addAnimation(0, "jump", false, 3);
+		// let jumpEntry = animationState.addAnimation(0, "jump", false, 3);
 		animationState.addAnimation(0, "run", true, 0);
 	} else {
 		animationState.setAnimation(0, initialAnimation, true);
 	}
 	animationState.addListener({
-		start: function(track) {
+		start: function(track: spine.TrackEntry) {
 			console.log("Animation on track " + track.trackIndex + " started");
 		},
-		interrupt: function(track) {
+		interrupt: function(track: spine.TrackEntry) {
 			console.log("Animation on track " + track.trackIndex + " interrupted");
 		},
-		end: function(track) {
+		end: function(track: spine.TrackEntry) {
 			console.log("Animation on track " + track.trackIndex + " ended");
 		},
-		disposed: function(track) {
+		dispose: function(track: spine.TrackEntry) {
 			console.log("Animation on track " + track.trackIndex + " disposed");
 		},
-		complete: function(track) {
+		complete: function(track: spine.TrackEntry) {
 			console.log("Animation on track " + track.trackIndex + " completed");
 		},
-		event: function(track, event) {
+		event: function(track: spine.TrackEntry, event: spine.Event) {
 			console.log("Event on track " + track.trackIndex + ": " + JSON.stringify(event));
 		}
 	})
@@ -135,7 +162,7 @@ function loadSkeleton (name, initialAnimation, premultipliedAlpha, skin) {
 	return { skeleton: skeleton, state: animationState, bounds: bounds, premultipliedAlpha: premultipliedAlpha };
 }
 
-function calculateBounds(skeleton) {
+function calculateBounds(skeleton: spine.Skeleton) {
 	skeleton.setToSetupPose();
 	skeleton.updateWorldTransform();
 	let offset = new spine.Vector2();
@@ -145,84 +172,88 @@ function calculateBounds(skeleton) {
 }
 
 function setupUI () {
-	let skeletonList = $("#skeletonList");
+	let skeletonList = $("#skeletonList") as HTMLSelectElement;
 	for (let skeletonName in skeletons) {
-		let option = $("<option></option>");
-		option.attr("value", skeletonName).text(skeletonName);
-		if (skeletonName === activeSkeleton) option.attr("selected", "selected");
+		let option = document.createElement('option');
+		option.setAttribute("value", skeletonName);
+		option.text = skeletonName;
+		if (skeletonName === activeSkeleton) option.setAttribute("selected", "selected");
 		skeletonList.append(option);
 	}
-	let effectList = $("#effectList");
+	let effectList = $("#effectList")!;
 	let effects = ["None", "Swirl", "Jitter"];
 	for (let effect in effects) {
 		let effectName = effects[effect];
-		let option = $("<option></option>");
-		option.attr("value", effectName).text(effectName);
+		let option = document.createElement('option');
+		option.setAttribute("value", effectName);
+		option.text = effectName;
 		effectList.append(option);
 	}
 	let setupAnimationUI = function() {
-		let animationList = $("#animationList");
-		animationList.empty();
+		let animationList = $("#animationList")! as HTMLSelectElement;
+		animationList.innerHTML = '';
 		let skeleton = skeletons[activeSkeleton].skeleton;
 		let state = skeletons[activeSkeleton].state;
 		let activeAnimation = state.tracks[0].animation.name;
 		for (let i = 0; i < skeleton.data.animations.length; i++) {
 			let name = skeleton.data.animations[i].name;
-			let option = $("<option></option>");
-			option.attr("value", name).text(name);
-			if (name === activeAnimation) option.attr("selected", "selected");
+			let option = document.createElement('option');
+			option.setAttribute("value", name);
+			option.text = name;
+			if (name === activeAnimation) option.setAttribute("selected", "selected");
 			animationList.append(option);
 		}
 
-		animationList.change(function() {
+		animationList.onchange = function() {
 			let state = skeletons[activeSkeleton].state;
 			let skeleton = skeletons[activeSkeleton].skeleton;
-			let animationName = $("#animationList option:selected").text();
+			let animationName = getSelectedText('animationList');
 			skeleton.setToSetupPose();
 			state.setAnimation(0, animationName, true);
-		})
+		}
 	}
 
 	let setupSkinUI = function() {
-		let skinList = $("#skinList");
-		skinList.empty();
+		let skinList = $("#skinList") as HTMLSelectElement;
+		skinList.innerHTML = '';
 		let skeleton = skeletons[activeSkeleton].skeleton;
 		let activeSkin = skeleton.skin == null ? "default" : skeleton.skin.name;
 		for (let i = 0; i < skeleton.data.skins.length; i++) {
 			let name = skeleton.data.skins[i].name;
-			let option = $("<option></option>");
-			option.attr("value", name).text(name);
-			if (name === activeSkin) option.attr("selected", "selected");
+			let option = document.createElement('option');
+			option.setAttribute("value", name);
+			option.text = name;
+			if (name === activeSkin) option.setAttribute("selected", "selected");
 			skinList.append(option);
 		}
 
-		skinList.change(function() {
+		skinList.onchange = function() {
 			let skeleton = skeletons[activeSkeleton].skeleton;
-			let skinName = $("#skinList option:selected").text();
+			let skinName = getSelectedText('skinList');
 			skeleton.setSkinByName(skinName);
 			skeleton.setSlotsToSetupPose();
-		})
+		}
 	}
 
-	skeletonList.change(function() {
-		activeSkeleton = $("#skeletonList option:selected").text();
+	skeletonList.onchange = function() {
+		activeSkeleton = getSelectedText('skeletonList');
 		setupAnimationUI();
 		setupSkinUI();
-	})
+	}
 	setupAnimationUI();
 	setupSkinUI();
 }
 
-function render () {
-	let now = Date.now() / 1000;
+function render (timestamp: DOMHighResTimeStamp) {
+	let now = timestamp / 1000;
 	let delta = now - lastFrameTime;
 	lastFrameTime = now;
 
 	// Update the MVP matrix to adjust for canvas size changes
 	resize();
 
-	gl.clearColor(0.3, 0.3, 0.3, 1);
-	gl.clear(gl.COLOR_BUFFER_BIT);
+	gl!.clearColor(0.3, 0.3, 0.3, 1);
+	gl!.clear(gl!.COLOR_BUFFER_BIT);
 
 	// Apply the animation state based on the delta time.
 	let state = skeletons[activeSkeleton].state;
@@ -241,9 +272,12 @@ function render () {
 	// Start the batch and tell the SkeletonRenderer to render the active skeleton.
 	batcher.begin(shader);
 
-	let effect = $("#effectList option:selected").text();
+	let effect = getSelectedText('effectList');
 	if (effect == "None") {
-		skeletonRenderer.vertexEffect = null;
+		skeletonRenderer.vertexEffect = { begin: (skeleton: spine.Skeleton) => {},
+			transform: (position: spine.Vector2, uv: spine.Vector2, light: spine.Color, dark: spine.Color) => {},
+			end: ()=> {}
+		}
 	} else if (effect == "Swirl") {
 		swirlTime += delta;
 		let percent = swirlTime % 2;
@@ -265,7 +299,7 @@ function render () {
 	shader.unbind();
 
 	// draw debug information
-	let debug = $('#debug').is(':checked');
+	let debug = ($('#debug') as HTMLInputElement).checked;
 	if (debug) {
 		debugShader.bind();
 		debugShader.setUniform4x4f(spine.webgl.Shader.MVP_MATRIX, mvp.values);
@@ -299,7 +333,7 @@ function resize () {
 	let height = canvas.height * scale;
 
 	mvp.ortho2d(centerX - width / 2, centerY - height / 2, width, height);
-	gl.viewport(0, 0, canvas.width, canvas.height);
+	gl!.viewport(0, 0, canvas.width, canvas.height);
 }
 
 init();

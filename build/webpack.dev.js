@@ -57,7 +57,8 @@ module.exports = {
   devServer: {
     // contentBase: `${__dirname}/../dist`,
     // publicPath: 'Demos/dist/',
-    // compress: true,
-    port: 9000
+    open: true,
+    compress: true,
+    port: 8456
   }
 }
