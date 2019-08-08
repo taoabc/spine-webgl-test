@@ -1623,7 +1623,7 @@ declare module spine.webgl {
     class SkeletonRenderer {
         static QUAD_TRIANGLES: number[];
         premultipliedAlpha: boolean;
-        vertexEffect: VertexEffect;
+        vertexEffect: VertexEffect | null;
         private tempColor;
         private tempColor2;
         private vertices;
